@@ -1,0 +1,67 @@
+import socket
+import threading
+from queue import Queue
+from datetime import datetime
+
+print_lock = threading.Lock()
+target = ""
+queue = Queue()
+
+def grab_banner(port):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket.setdefaulttimeout(1)
+        s.connect((target, port))
+        try:
+            banner = s.recv(1024).decode().strip()
+            if banner:
+                return banner
+        except:
+            pass
+        
+        if port in [80, 8080, 443]:
+            s.send(b'HEAD / HTTP/1.1\r\n\r\n')
+        else:
+            s.send(b'Hello\r\n')
+            
+        banner = s.recv(1024).decode().strip()
+        s.close()
+        return banner
+    except:
+        return "No Banner"
+
+def port_scan(port):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket.setdefaulttimeout(0.5) 
+        result = s.connect_ex((target, port))
+        if result == 0:
+            banner = grab_banner(port)
+            with print_lock:
+                print(f"Port {port}: OPEN | Banner: {banner}")
+        s.close()
+    except:
+        pass
+
+def threader():
+    while True:
+        worker = queue.get()
+        port_scan(worker)
+        queue.task_done()
+
+if __name__ == "__main__":
+    target = input("Enter Target IP: ")
+    print(f"Scanning target: {target}")
+    print(f"Time started: {datetime.now()}")
+
+    for x in range(100):
+        t = threading.Thread(target=threader)
+        t.daemon = True
+        t.start()
+    
+    for worker in range(1, 1025):
+        queue.put(worker)
+    
+    queue.join()
+
+    print(f"Time finished: {datetime.now()}")
